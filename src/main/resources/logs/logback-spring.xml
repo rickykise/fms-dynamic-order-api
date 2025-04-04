@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <!-- 콘솔 출력을 위한 컬러 설정 -->
+  <conversionRule conversionWord="clr" converterClass="org.springframework.boot.logging.logback.ColorConverter" />
+
+  <property name="LOG_PATTERN"
+            value="[%d{YYYY-MM-dd HH:mm:ss.SSS z, Asia/Seoul}] [%-5level] [%thread] %logger{36}:%L - %msg %n"/>
+
+  <!-- 기본 로그 레벨 설정 -->
+  <property name="LOG_LEVEL" value="${LOG_LEVEL:-INFO}" />
+
+  <!-- 콘솔 Appender 설정 -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+      <charset>UTF-8</charset>
+      <pattern>${LOG_PATTERN}</pattern>
+    </encoder>
+  </appender>
+
+  <!-- 파일 Appender 설정 -->
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_DIR}/dynamicorder.log</file>
+    <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+      <charset>UTF-8</charset>
+      <pattern>${LOG_PATTERN}</pattern>
+    </encoder>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <fileNamePattern>${LOG_DIR}/dynamicorder.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+      <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+        <maxFileSize>100MB</maxFileSize>
+      </timeBasedFileNamingAndTriggeringPolicy>
+      <maxHistory>${MAX_PERIOD_IN_DAYS}</maxHistory>
+    </rollingPolicy>
+  </appender>
+
+  <!-- Kafka 관련 로그 설정 -->
+  <logger name="org.apache.kafka" level="INFO" />
+
+  <!-- MongoDB 관련 로그 설정 -->
+  <logger name="org.mongodb.driver" level="DEBUG" additivity="false">
+    <appender-ref ref="CONSOLE" />
+  </logger>
+
+  <logger name="org.mongodb.driver.cluster" level="INFO" additivity="false">
+    <appender-ref ref="CONSOLE" />
+  </logger>
+
+  <!-- 애플리케이션 패키지 로그 설정 -->
+  <logger name="fassto.fms" level="DEBUG" additivity="false">
+    <appender-ref ref="CONSOLE" />
+  </logger>
+
+  <!-- Spring Framework 로그 설정 -->
+  <logger name="org.springframework.web" level="DEBUG" additivity="false">
+    <appender-ref ref="CONSOLE" />
+  </logger>
+
+  <!-- 환경별 설정 -->
+  <springProfile name="local">
+    <property name="LOG_DIR" value="logs"/>
+    <property name="MAX_PERIOD_IN_DAYS" value="1"/>
+    <logger name="com.feelcoding.logbackdemo" level="DEBUG" />
+    <root level="INFO">
+      <appender-ref ref="CONSOLE" />
+    </root>
+  </springProfile>
+  <springProfile name="dev|stg">
+    <property name="LOG_DIR" value="/logs/dynamicorder"/>
+    <property name="MAX_PERIOD_IN_DAYS" value="7"/>
+    <root level="INFO">
+      <appender-ref ref="CONSOLE" />
+      <appender-ref ref="FILE" />
+    </root>
+  </springProfile>
+  <springProfile name="prod">
+    <property name="LOG_DIR" value="/logs/dynamicorder"/>
+    <property name="MAX_PERIOD_IN_DAYS" value="30"/>
+    <root level="INFO">
+      <appender-ref ref="CONSOLE" />
+      <appender-ref ref="FILE" />
+    </root>
+  </springProfile>
+</configuration>

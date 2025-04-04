@@ -1,0 +1,27 @@
+name: 'Dependencies Verify, Static Code Analysis, Code Test'
+
+on:
+  pull_request:
+    branches: [ "prod"]
+
+jobs:
+  pull_request:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          version: 'latest'
+          java-version: '21'
+          components: 'espresso'
+          cache: 'gradle'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate Gradle wrapper
+        uses: gradle/wrapper-validation-action@v1
+
+      - name: Build with Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          arguments: build

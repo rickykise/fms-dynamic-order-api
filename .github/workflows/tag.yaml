@@ -1,0 +1,57 @@
+name: 'Tagging & Build & Push image to ECR'
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  tag:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Get Github action IP
+        id: ip
+        uses: haythem/public-ip@v1.3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ap-northeast-2
+      - name: modify SecurityGroupRuleId ip
+        env:
+          PROTOCOL: TCP
+          PORT: 443
+        run: |
+          aws ec2 modify-security-group-rules \
+          --group-id ${{secrets.NEXUS_SG_ID}} \
+          --security-group-rules "SecurityGroupRuleId=${{secrets.NEXUS_SG_RULE_ID}},SecurityGroupRule={Description='from github to nexus',IpProtocol=${{env.PROTOCOL}},CidrIpv4=${{ steps.ip.outputs.ipv4 }}/32,FromPort=${{env.PORT}},ToPort=${{env.PORT}}}"
+      - name: Get tag
+        id: tag
+        uses: dawidd6/action-get-tag@v1
+        with:
+          strip_v: true
+      - uses: actions/checkout@v3
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          cache: 'gradle'
+      - name: Validate Gradle wrapper
+        uses: gradle/wrapper-validation-action@v1
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ap-northeast-2
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Build with Gradle and Push Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{steps.tag.outputs.tag}}
+        run: |
+          ./gradlew jib -Djib.to.image=$ECR_REGISTRY/${{ secrets.ECR_REPOSITORY_PROD }} -Djib.to.tags=$IMAGE_TAG

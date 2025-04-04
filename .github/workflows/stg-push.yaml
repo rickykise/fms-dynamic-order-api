@@ -1,0 +1,75 @@
+name: 'STG Build & Push image to ECR'
+
+on:
+  push:
+    branches: ["stg"]
+
+jobs:
+  push:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: ap-northeast-2
+      - name: Get Github action IP
+        id: ip
+        uses: haythem/public-ip@v1.3
+      - uses: actions/checkout@v3
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+          cache: 'gradle'
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Get sha_short
+        id: vars
+        run: |
+          SHA_SHORT=$(git rev-parse --short HEAD)
+          echo "sha_short=$SHA_SHORT" >> $GITHUB_OUTPUT
+          echo "SHA value: $SHA_SHORT" # 디버깅용
+      - name: Validate Gradle wrapper
+        uses: gradle/wrapper-validation-action@v1
+      - name: Build with Gradle and Push Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: latest
+          SHA_TAG: ${{ steps.vars.outputs.sha_short || 'stg' }}
+        run: |
+          # 태그 확인 및 디버깅 출력
+          echo "ECR Registry: $ECR_REGISTRY"
+          echo "Image Tag: $IMAGE_TAG"
+          echo "SHA Tag: $SHA_TAG"
+          
+          # 빈 태그 방지
+          if [ -z "$SHA_TAG" ]; then
+            SHA_TAG="stg"
+            echo "SHA_TAG was empty, using default: $SHA_TAG"
+          fi
+          
+          ./gradlew jib -Djib.to.image=$ECR_REGISTRY/${{ secrets.ECR_REPOSITORY_STG }} -Djib.to.tags=$IMAGE_TAG,$SHA_TAG
+
+  deploy-stage:
+    runs-on: ubuntu-20.04
+    needs:
+      - push
+    steps:
+      - name: Download ArgoCd CLI v2.4.11
+        run: curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 && chmod +x /usr/local/bin/argocd
+      - name: ArgoCd Login
+        env:
+          URL: ${{secrets.PROD_ARGO_ADDR}}
+        run: argocd login ${{env.URL}} --grpc-web --username=${{ secrets.PROD_ARGO_USERNAME }} --password=${{ secrets.PROD_ARGO_PASSWORD }}
+      - name: ArgoCd Deploy
+        env:
+          RESOURCE_NAME: ${{ secrets.ARGO_PROJECT_NAME_STG }}
+          KIND: Rollout
+        run: |
+          argocd app actions run ${{env.RESOURCE_NAME}} restart --kind ${{env.KIND}} --grpc-web
